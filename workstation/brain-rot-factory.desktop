@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Brain-Rot Control Panel
+Comment=Open the factory dashboard (start factory first)
+Exec=xdg-open http://localhost:8069
+Icon=video-x-generic
+Terminal=false
+Categories=AudioVideo;Game;

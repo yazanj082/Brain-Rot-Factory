@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Brain-Rot Stop Factory
+Comment=Stop all factory services and Ollama
+Exec=/home/yazan/Documents/Projects/brain-rot-factory/scripts/stop-factory.sh
+Icon=media-playback-stop
+Terminal=false
+Categories=AudioVideo;Game;

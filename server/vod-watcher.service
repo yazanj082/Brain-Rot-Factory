@@ -1,0 +1,16 @@
+[Unit]
+Description=Brain-Rot Shorts Factory — VOD Watcher Daemon
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yazan
+WorkingDirectory=/home/yazan/Documents/Projects/brain-rot-factory/server
+ExecStart=/usr/bin/python3 /home/yazan/Documents/Projects/brain-rot-factory/server/vod_watcher.py --upload
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

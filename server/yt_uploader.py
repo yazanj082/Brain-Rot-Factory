@@ -1,0 +1,216 @@
+"""
+Brain-Rot Shorts Factory — YouTube Uploader
+Uses the official Google API Client for resumable uploads to YouTube.
+"""
+
+import http.client
+import httplib2
+import logging
+import random
+import sys
+import time
+from pathlib import Path
+from typing import List, Optional
+
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+
+import config
+from brain_rot_factory import generate_title
+
+log = logging.getLogger(__name__)
+
+# YouTube API scopes
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+
+# Retry configuration
+MAX_RETRIES = 5
+RETRIABLE_STATUS_CODES = [500, 502, 503, 504]
+RETRIABLE_EXCEPTIONS = (httplib2.HttpLib2Error, IOError, http.client.NotConnected,
+                         http.client.IncompleteRead, http.client.ImproperConnectionState,
+                         http.client.CannotSendRequest, http.client.CannotSendHeader,
+                         http.client.ResponseNotReady, http.client.BadStatusLine)
+
+TAGS = [
+    "gaming", "shorts", "overwatch", "highlights", "outplay",
+    "clips", "montage", "brainrot", "gameplay", "fps",
+]
+
+
+def _authenticate() -> Credentials:
+    """
+    Handle OAuth2 authentication.
+    First run: opens browser for consent (run manually on the server once).
+    Subsequent runs: reuses stored token from OAUTH_FILE.
+    """
+    creds: Optional[Credentials] = None
+    token_path = config.OAUTH_FILE
+
+    # Load existing token
+    if token_path.exists():
+        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+
+    # Refresh or re-authenticate
+    if creds and creds.expired and creds.refresh_token:
+        log.info("Refreshing expired OAuth token...")
+        creds.refresh(Request())
+    elif not creds or not creds.valid:
+        if not config.SECRETS_FILE.exists():
+            log.error(
+                "OAuth secrets file not found at %s. "
+                "Download it from Google Cloud Console → APIs & Services → Credentials.",
+                config.SECRETS_FILE,
+            )
+            sys.exit(1)
+        log.info("Starting OAuth flow — a browser window will open for authorisation...")
+        flow = InstalledAppFlow.from_client_secrets_file(str(config.SECRETS_FILE), SCOPES)
+        creds = flow.run_local_server(port=0)
+
+    # Persist for next time
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    token_path.write_text(creds.to_json())
+    log.info("OAuth token saved to %s", token_path)
+
+    return creds
+
+
+def _resumable_upload(request) -> Optional[str]:
+    """
+    Execute a resumable upload with exponential back-off retries.
+    Returns the video ID on success, None on failure.
+    """
+    response = None
+    retry = 0
+
+    while response is None:
+        try:
+            log.info("Uploading chunk...")
+            status, response = request.next_chunk()
+            if status:
+                log.info("Upload progress: %d%%", int(status.progress() * 100))
+        except HttpError as e:
+            if e.resp.status in RETRIABLE_STATUS_CODES:
+                log.warning("Retriable HTTP %d error — retrying...", e.resp.status)
+            else:
+                raise
+        except RETRIABLE_EXCEPTIONS as e:
+            log.warning("Retriable error: %s — retrying...", e)
+
+        if response is None:
+            retry += 1
+            if retry > MAX_RETRIES:
+                log.error("Upload failed after %d retries.", MAX_RETRIES)
+                return None
+            wait = random.uniform(0, 2 ** retry)
+            log.info("Sleeping %.1fs before retry %d/%d", wait, retry, MAX_RETRIES)
+            time.sleep(wait)
+
+    video_id = response.get("id")
+    log.info("✅ Upload complete! Video ID: %s", video_id)
+    log.info("   https://youtube.com/shorts/%s", video_id)
+    return video_id
+
+
+def upload_to_youtube(
+    video_file: Path,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    clip_id: Optional[int] = None,
+) -> Optional[str]:
+    """
+    Upload *video_file* to YouTube as a Short.
+
+    Args:
+        video_file: Path to the .mp4 file.
+        title: Optional title override; auto-generated if omitted.
+        description: Optional description; default boilerplate if omitted.
+        tags: Optional tag list; defaults to TAGS constant.
+        clip_id: If set, persist youtube_id back to clip_db.
+
+    Returns:
+        The YouTube video ID on success, None on failure.
+    """
+    if not video_file.exists():
+        log.error("Video file not found: %s", video_file)
+        return None
+
+    creds = _authenticate()
+    youtube = build("youtube", "v3", credentials=creds)
+
+    final_title = title or generate_title()
+    final_description = description or (
+        "Automated highlight clip from a live gaming session.\n"
+        "Generated by the Brain-Rot Shorts Factory 🧠🔥\n\n"
+        "#shorts #gaming #highlights"
+    )
+    final_tags = tags if tags is not None else TAGS
+
+    body = {
+        "snippet": {
+            "title": final_title,
+            "description": final_description,
+            "tags": final_tags,
+            "categoryId": config.CATEGORY_ID,
+        },
+        "status": {
+            "privacyStatus": config.PRIVACY_STATUS,
+            "selfDeclaredMadeForKids": False,
+        },
+    }
+
+    media = MediaFileUpload(
+        str(video_file),
+        mimetype="video/mp4",
+        resumable=True,
+        chunksize=10 * 1024 * 1024,  # 10 MB chunks
+    )
+
+    log.info("📤 Uploading: %s (%s)", video_file.name, body["snippet"]["title"])
+
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body=body,
+        media_body=media,
+    )
+
+    try:
+        video_id = _resumable_upload(request)
+        if video_id and clip_id is not None:
+            try:
+                import clip_db
+                clip_db.mark_uploaded(
+                    clip_id, video_id, final_title, final_description, final_tags
+                )
+            except Exception as exc:
+                log.warning("Could not update clip_db for clip %s: %s", clip_id, exc)
+        return video_id
+    except HttpError as e:
+        log.error("YouTube API error: %s", e)
+        return None
+
+
+# ──────────────────────────────────────────────
+# Standalone usage / initial OAuth test
+# ──────────────────────────────────────────────
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+
+    if len(sys.argv) < 2:
+        print("Usage: python yt_uploader.py <video.mp4> [title]")
+        print("\nFirst run will open a browser window to complete OAuth.")
+        sys.exit(1)
+
+    video = Path(sys.argv[1])
+    custom_title = sys.argv[2] if len(sys.argv) > 2 else None
+    vid_id = upload_to_youtube(video, custom_title)
+
+    if vid_id:
+        print(f"\n🎉 Uploaded: https://youtube.com/shorts/{vid_id}")
+    else:
+        print("\n❌ Upload failed.")
+        sys.exit(1)

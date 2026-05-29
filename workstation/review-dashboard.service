@@ -1,0 +1,14 @@
+[Unit]
+Description=Brain-Rot Shorts Factory — Control Panel
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/yazan/Documents/Projects/brain-rot-factory/server
+ExecStart=/home/yazan/Documents/Projects/brain-rot-factory/.venv/bin/python3 /home/yazan/Documents/Projects/brain-rot-factory/server/review_dashboard.py
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

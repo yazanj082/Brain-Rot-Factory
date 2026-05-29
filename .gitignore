@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.env
+.env.*
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local secrets and runtime data (never commit)
+shorts_assets/
+oauth.json
+client_secrets.json
+
+# Optional: large local test media in repo folder
+*.mp4
+*.mkv
+*.webm

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Brain-Rot Start Factory
+Comment=Start Ollama, VOD watcher, and Control Panel
+Exec=/home/yazan/Documents/Projects/brain-rot-factory/scripts/start-factory.sh
+Icon=media-playback-start
+Terminal=false
+Categories=AudioVideo;Game;

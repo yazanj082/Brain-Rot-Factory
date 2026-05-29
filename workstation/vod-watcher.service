@@ -1,0 +1,16 @@
+[Unit]
+Description=Brain-Rot Shorts Factory — Local VOD Watcher Daemon
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/yazan/Documents/Projects/brain-rot-factory/server
+# NOTE: --upload flag REMOVED. Clips are generated but NOT auto-uploaded.
+# Use the Review Dashboard (http://localhost:8069) to preview and approve uploads.
+ExecStart=/home/yazan/Documents/Projects/brain-rot-factory/.venv/bin/python3 /home/yazan/Documents/Projects/brain-rot-factory/server/vod_watcher.py
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
