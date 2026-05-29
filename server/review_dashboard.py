@@ -144,7 +144,21 @@ body{font-family:'Inter',sans-serif;background:#0a0a0f;color:#e4e4e7;min-height:
 
 <div id="settings" class="panel">
   <div class="schedule">
-    <h3>Quality threshold</h3>
+    <h3>Recording</h3>
+    <p style="font-size:.8rem;color:#71717a;margin-bottom:.75rem">Applies the next time you click Start Gaming Session.</p>
+    <div class="schedule-row">
+      <label>FPS</label>
+      <input type="number" id="recordFps" min="15" max="60" step="1" value="30" style="width:70px;padding:.4rem;border-radius:6px;border:1px solid #3f3f46;background:#0a0a0f;color:#fff">
+      <label>Quality</label>
+      <select id="recordQuality" style="padding:.4rem;border-radius:6px;border:1px solid #3f3f46;background:#0a0a0f;color:#fff">
+        <option value="ultralow">Ultra low (lightest)</option>
+        <option value="low">Low (less GPU/RAM)</option>
+        <option value="medium">Medium</option>
+        <option value="high" selected>High (default)</option>
+        <option value="veryhigh">Very high (heavier)</option>
+      </select>
+    </div>
+    <h3 style="margin-top:1.25rem">Quality threshold</h3>
     <div class="schedule-row">
       <label>Min hype score (1-10)</label>
       <input type="number" id="minHype" min="1" max="10" step="0.5" value="6">
@@ -402,6 +416,8 @@ async function refresh(opts = {}) {
       $('#autoUpload').checked = s.auto_upload_enabled !== false;
       $('#minHype').value = s.min_hype_score ?? 6;
       $('#gameName').value = s.game_name || 'Overwatch';
+      $('#recordFps').value = s.record_fps ?? 30;
+      if (s.record_quality) $('#recordQuality').value = s.record_quality;
       $('#visionModel').value = s.vision_model || '';
       $('#textModel').value = s.textModel || s.text_model || '';
     }
@@ -439,13 +455,15 @@ $('#btnSaveSchedule').onclick = async () => {
   refresh({ forceClips: true });
 };
 $('#btnSaveSettings').onclick = async () => {
-  await api('/api/settings', 'POST', {
+  const r = await api('/api/settings', 'POST', {
     min_hype_score: +$('#minHype').value,
     game_name: $('#gameName').value,
+    record_fps: +$('#recordFps').value,
+    record_quality: $('#recordQuality').value,
     vision_model: $('#visionModel').value,
     text_model: $('#textModel').value,
   });
-  toast('Settings saved');
+  toast(r.ok !== false ? 'Settings saved' : (r.error || 'Save failed'));
   refresh({ forceClips: true });
 };
 $('#btnCleanupAll').onclick = async () => {
@@ -691,11 +709,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self._json(load_settings())
 
     def _handle_settings(self, data: dict):
+        from settings import normalize_recording_updates
+
         allowed = {
             "upload_hour", "upload_minute", "auto_upload_enabled",
             "min_hype_score", "game_name", "vision_model", "text_model",
+            "record_fps", "record_quality",
         }
         updates = {k: v for k, v in data.items() if k in allowed}
+        try:
+            updates.update(normalize_recording_updates(updates))
+        except ValueError as exc:
+            self._json({"ok": False, "error": str(exc)})
+            return
         save_settings(updates)
         self._json({"ok": True, "settings": load_settings()})
 

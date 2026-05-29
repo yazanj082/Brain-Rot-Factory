@@ -75,6 +75,10 @@ ollama pull qwen2.5:7b
 | 5 | **Clips** tab — approve/reject, upload best |
 | 6 | **Brain-Rot Stop Factory** when finished (frees GPU RAM) |
 
+### Recording quality (Control Panel)
+
+**Settings** → **Recording** lets you set **FPS** (15–60) and **quality** (`ultralow` … `veryhigh` for `gpu-screen-recorder`). Click **Save settings**, then start your next session with **Start Gaming Session** — the recorder reads `~/shorts_assets/settings.json`.
+
 ### Free disk space
 
 **Settings** → **Delete all videos & clips** removes:
@@ -122,6 +126,10 @@ Environment variables (optional — defaults work for most users):
 | `BRF_MIN_HYPE_SCORE` | `6` | Min score to auto-upload |
 | `BRF_VISION_MODEL` | `moondream` | Ollama vision model |
 | `BRF_TEXT_MODEL` | `qwen2.5:7b` | Caption/title model |
+| `record_fps` | `30` | Recording FPS (dashboard → `settings.json`) |
+| `record_quality` | `high` | Recorder preset: `ultralow`, `low`, `medium`, `high`, `veryhigh` |
+| `BRF_RECORD_FPS` | (from settings) | Overrides `record_fps` when set in the environment |
+| `BRF_RECORD_QUALITY` | (from settings) | Overrides `record_quality` when set in the environment |
 
 After changing services, restart the dashboard:
 

@@ -12,6 +12,12 @@ import config
 
 log = logging.getLogger(__name__)
 
+RECORD_QUALITY_PRESETS = frozenset({
+    "ultralow", "low", "medium", "high", "veryhigh",
+})
+RECORD_FPS_MIN = 15
+RECORD_FPS_MAX = 60
+
 DEFAULTS: dict[str, Any] = {
     "auto_upload_enabled": True,
     "upload_hour": config.DAILY_UPLOAD_HOUR,
@@ -22,7 +28,39 @@ DEFAULTS: dict[str, Any] = {
     "vision_model": config.VISION_MODEL,
     "vision_fallback_model": config.VISION_FALLBACK_MODEL,
     "text_model": config.TEXT_MODEL,
+    "record_fps": config.RECORD_FPS,
+    "record_quality": config.RECORD_QUALITY,
 }
+
+
+def _coerce_recording_settings(data: dict[str, Any]) -> None:
+    """Normalize recording fields after merge (invalid JSON values fall back)."""
+    try:
+        fps = int(float(data.get("record_fps", config.RECORD_FPS)))
+        data["record_fps"] = max(RECORD_FPS_MIN, min(RECORD_FPS_MAX, fps))
+    except (TypeError, ValueError):
+        data["record_fps"] = config.RECORD_FPS
+
+    q = str(data.get("record_quality", config.RECORD_QUALITY)).strip().lower()
+    data["record_quality"] = q if q in RECORD_QUALITY_PRESETS else config.RECORD_QUALITY
+
+
+def normalize_recording_updates(updates: dict[str, Any]) -> dict[str, Any]:
+    """Validate and return recording keys from a settings PATCH."""
+    out: dict[str, Any] = {}
+    if "record_fps" in updates:
+        try:
+            fps = int(float(updates["record_fps"]))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("record_fps must be a number") from exc
+        out["record_fps"] = max(RECORD_FPS_MIN, min(RECORD_FPS_MAX, fps))
+    if "record_quality" in updates:
+        q = str(updates["record_quality"]).strip().lower()
+        if q not in RECORD_QUALITY_PRESETS:
+            allowed = ", ".join(sorted(RECORD_QUALITY_PRESETS))
+            raise ValueError(f"record_quality must be one of: {allowed}")
+        out["record_quality"] = q
+    return out
 
 
 def load_settings() -> dict[str, Any]:
@@ -33,6 +71,7 @@ def load_settings() -> dict[str, Any]:
         data = json.loads(path.read_text())
         merged = dict(DEFAULTS)
         merged.update(data)
+        _coerce_recording_settings(merged)
         return merged
     except (json.JSONDecodeError, OSError) as exc:
         log.warning("Failed to load settings: %s — using defaults", exc)
@@ -40,6 +79,7 @@ def load_settings() -> dict[str, Any]:
 
 
 def save_settings(updates: dict[str, Any]) -> dict[str, Any]:
+    updates = {**updates, **normalize_recording_updates(updates)}
     current = load_settings()
     current.update(updates)
     config.SETTINGS_FILE.write_text(json.dumps(current, indent=2))

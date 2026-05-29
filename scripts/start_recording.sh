@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VENV="$ROOT/.venv"
+
 UID_NUM="$(id -u)"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$UID_NUM}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
@@ -11,9 +15,27 @@ export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUN
 export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-wayland}"
 export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-KDE}"
 
-# Lighter defaults to reduce RAM use while gaming (override via env)
-RECORD_FPS="${BRF_RECORD_FPS:-30}"
-RECORD_QUALITY="${BRF_RECORD_QUALITY:-high}"
+# Dashboard settings.json, then env BRF_* overrides
+RECORD_FPS="30"
+RECORD_QUALITY="high"
+if [[ -x "$VENV/bin/python3" ]]; then
+  while IFS='=' read -r key val; do
+    [[ -n "$key" ]] || continue
+    case "$key" in
+      RECORD_FPS) RECORD_FPS="$val" ;;
+      RECORD_QUALITY) RECORD_QUALITY="$val" ;;
+    esac
+  done < <("$VENV/bin/python3" -c "
+import sys
+sys.path.insert(0, '$ROOT/server')
+from settings import load_settings
+s = load_settings()
+print('RECORD_FPS=' + str(int(s.get('record_fps', 30))))
+print('RECORD_QUALITY=' + str(s.get('record_quality', 'high')))
+")
+fi
+RECORD_FPS="${BRF_RECORD_FPS:-$RECORD_FPS}"
+RECORD_QUALITY="${BRF_RECORD_QUALITY:-$RECORD_QUALITY}"
 
 TOKEN_DIR="$HOME/.config/gpu-screen-recorder"
 mkdir -p "$TOKEN_DIR"
