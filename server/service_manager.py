@@ -3,6 +3,7 @@ Brain-Rot Shorts Factory — systemd service control (whitelisted units only)
 """
 
 import logging
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -69,11 +70,16 @@ def is_recording() -> bool:
 
 
 def start_gaming_session() -> dict:
-    """Start recorder; ensure watcher is running."""
+    """Start recorder; ensure watcher is running. Stops Ollama first to free RAM (unless BRF_KEEP_OLLAMA=1)."""
     results = {}
     if not is_active("watcher"):
         ok, msg = start("watcher")
         results["watcher"] = {"ok": ok, "msg": msg}
+
+    keep_ollama = os.getenv("BRF_KEEP_OLLAMA", "").lower() in ("1", "true", "yes")
+    if not keep_ollama and _ollama_ready():
+        ok, msg = stop_ollama(True)
+        results["ollama"] = {"ok": ok, "msg": msg or "Stopped Ollama to free RAM for gaming"}
 
     # Restart (not just start) so portal token is cleared and picker runs again
     ok, msg = _run_systemctl("restart", UNIT_MAP["recorder"])
@@ -88,6 +94,19 @@ def stop_recording() -> dict:
     ok, msg = stop("recorder")
     results = {"recorder": {"ok": ok, "msg": msg}}
     if ok:
+        oll_ok, oll_msg = start_ollama()
+        results["ollama"] = {"ok": oll_ok, "msg": oll_msg}
+        if oll_ok:
+            try:
+                from clip_scorer import vision_models_ready
+
+                if not vision_models_ready():
+                    results["ollama"]["vision_warning"] = (
+                        "No vision model loaded. Run: ollama pull moondream"
+                    )
+            except Exception as exc:
+                log.warning("Vision model check failed: %s", exc)
+
         try:
             from clip_scorer import run_post_recording_scoring
             import threading
@@ -96,7 +115,10 @@ def stop_recording() -> dict:
                 run_post_recording_scoring()
 
             threading.Thread(target=_score, name="post-recording-score", daemon=True).start()
-            results["scoring"] = {"ok": True, "msg": "Scoring queued after recording stopped"}
+            results["scoring"] = {
+                "ok": True,
+                "msg": "Ollama starting — clips will score after VOD processing",
+            }
         except Exception as exc:
             log.warning("Could not start post-recording scoring: %s", exc)
     return results
@@ -122,6 +144,25 @@ def start_ollama() -> tuple[bool, str]:
                     return True, f"Started {unit}"
                 time.sleep(1)
             return True, f"Started {unit} (waiting for API)"
+    try:
+        log_dir = Path.home() / ".local" / "log"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "ollama-serve.log"
+        with open(log_file, "a", encoding="utf-8") as fh:
+            subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=fh,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        for _ in range(30):
+            if _ollama_ready():
+                return True, "Started ollama serve"
+            time.sleep(1)
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        log.warning("ollama serve fallback failed: %s", exc)
     return False, "Could not start Ollama (install ollama.service or run ollama serve)"
 
 
@@ -130,14 +171,20 @@ def stop_ollama(stop: bool = True) -> tuple[bool, str]:
         return True, "Ollama left running"
     for unit in ("ollama.service", "ollama"):
         _run_systemctl("stop", unit)
+    try:
+        subprocess.run(["pkill", "-x", "ollama"], check=False, timeout=5)
+    except Exception:
+        pass
     return True, "Ollama stop requested"
 
 
 def start_factory(open_dashboard: bool = False) -> dict:
-    """Start Ollama, watcher, and dashboard — not the game recorder."""
+    """Start watcher and dashboard — not Ollama or the game recorder (lazy Ollama saves RAM)."""
     results: dict = {}
-    ok, msg = start_ollama()
-    results["ollama"] = {"ok": ok, "msg": msg}
+    results["ollama"] = {
+        "ok": True,
+        "msg": "Lazy start — Ollama runs after Stop Recording to save RAM while gaming",
+    }
     for svc in ("watcher", "dashboard"):
         ok, msg = start(svc)
         results[svc] = {"ok": ok, "msg": msg}
@@ -163,6 +210,7 @@ def stop_factory(stop_ollama: bool = True) -> dict:
 
 def all_status() -> dict:
     from ollama_client import is_ollama_available
+    from clip_scorer import vision_models_ready
     import clip_db
     from settings import load_settings, next_upload_datetime, seconds_until_next_upload
 
@@ -175,7 +223,11 @@ def all_status() -> dict:
         "recorder": get_status("recorder"),
         "watcher": get_status("watcher"),
         "dashboard": get_status("dashboard"),
-        "ollama": {"active": is_ollama_available()},
+        "ollama": {
+            "active": is_ollama_available(),
+            "vision_ready": vision_models_ready() if is_ollama_available() else False,
+            "lazy_mode": True,
+        },
         "queue": {
             "scored": counts.get("scored", 0),
             "pending_score": counts.get("pending_score", 0),

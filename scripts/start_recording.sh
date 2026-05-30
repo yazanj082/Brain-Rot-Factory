@@ -31,7 +31,8 @@ sys.path.insert(0, '$ROOT/server')
 from settings import load_settings
 s = load_settings()
 print('RECORD_FPS=' + str(int(s.get('record_fps', 30))))
-print('RECORD_QUALITY=' + str(s.get('record_quality', 'high')))
+from settings import quality_for_gpu_screen_recorder
+print('RECORD_QUALITY=' + quality_for_gpu_screen_recorder())
 ")
 fi
 RECORD_FPS="${BRF_RECORD_FPS:-$RECORD_FPS}"
@@ -55,5 +56,6 @@ exec gpu-screen-recorder \
     -f "$RECORD_FPS" \
     -k hevc \
     -q "$RECORD_QUALITY" \
+    -low-power yes \
     -a default_output \
     -o "${OUTPUT_DIR}/gameplay_$(date +%Y-%m-%d_%H-%M-%S).mp4"

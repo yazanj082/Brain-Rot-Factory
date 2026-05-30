@@ -70,7 +70,7 @@ DAILY_UPLOAD_HOUR: int = int(os.getenv("BRF_DAILY_UPLOAD_HOUR", "22"))
 DAILY_UPLOAD_MINUTE: int = int(os.getenv("BRF_DAILY_UPLOAD_MINUTE", "0"))
 REJECTED_DIR: Path = Path(os.getenv("BRF_REJECTED_DIR", OUTPUT_DIR / "rejected"))
 UPLOADED_DIR: Path = Path(os.getenv("BRF_UPLOADED_DIR", OUTPUT_DIR / "uploaded"))
-MIN_SCORE_MEM_KB: int = int(os.getenv("BRF_MIN_SCORE_MEM_KB", str(2 * 1024 * 1024)))
+MIN_SCORE_MEM_KB: int = int(os.getenv("BRF_MIN_SCORE_MEM_KB", str(1 * 1024 * 1024)))
 
 # ──────────────────────────────────────────────
 # Recording (gpu-screen-recorder)

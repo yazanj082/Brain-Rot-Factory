@@ -75,9 +75,21 @@ ollama pull qwen2.5:7b
 | 5 | **Clips** tab — approve/reject, upload best |
 | 6 | **Brain-Rot Stop Factory** when finished (frees GPU RAM) |
 
+**Lazy Ollama:** Start Factory does **not** start Ollama (saves RAM vs running OBS + AI together). Ollama starts when you click **Stop Recording**, then clips are scored. Vision models live on disk at `~/.ollama` and survive reboots — only the `ollama serve` process stops.
+
+### RAM while gaming
+
+The factory runs more than a recorder: **game + gpu-screen-recorder + watcher + dashboard**. OBS alone does not start Ollama or a clip pipeline, so total RAM use is often lower with OBS.
+
+To reduce load further:
+
+- Use **Settings → Recording** → `medium` FPS/quality
+- **Stop Factory** when done (stops Ollama and watchers)
+- Set `BRF_KEEP_OLLAMA=1` only if you want Ollama left running during recording (not recommended on 16 GB RAM)
+
 ### Recording quality (Control Panel)
 
-**Settings** → **Recording** lets you set **FPS** (15–60) and **quality** (`ultralow` … `veryhigh` for `gpu-screen-recorder`). Click **Save settings**, then start your next session with **Start Gaming Session** — the recorder reads `~/shorts_assets/settings.json`.
+**Settings** → **Recording** lets you set **FPS** (15–60) and **quality** (`medium`, `high`, `very_high`, `ultra` for `gpu-screen-recorder`). Click **Save settings**, then start your next session with **Start Gaming Session** — the recorder reads `~/shorts_assets/settings.json`.
 
 ### Free disk space
 
@@ -98,7 +110,7 @@ Brain-Rot-Factory/
 ├── setup.sh                 # Main installer (run this)
 ├── setup_workstation.sh     # Alias → setup.sh
 ├── scripts/
-│   ├── start-factory.sh     # Start Ollama + watcher + dashboard
+│   ├── start-factory.sh     # Start watcher + dashboard (Ollama after recording)
 │   ├── stop-factory.sh      # Stop everything
 │   └── rescore-pending.sh   # Re-run AI on existing clips
 ├── workstation/             # systemd units + .desktop launchers
@@ -127,9 +139,11 @@ Environment variables (optional — defaults work for most users):
 | `BRF_VISION_MODEL` | `moondream` | Ollama vision model |
 | `BRF_TEXT_MODEL` | `qwen2.5:7b` | Caption/title model |
 | `record_fps` | `30` | Recording FPS (dashboard → `settings.json`) |
-| `record_quality` | `high` | Recorder preset: `ultralow`, `low`, `medium`, `high`, `veryhigh` |
+| `record_quality` | `high` | Recorder preset: `medium`, `high`, `very_high`, `ultra` |
 | `BRF_RECORD_FPS` | (from settings) | Overrides `record_fps` when set in the environment |
 | `BRF_RECORD_QUALITY` | (from settings) | Overrides `record_quality` when set in the environment |
+| `BRF_MIN_SCORE_MEM_KB` | `1048576` (1 GB) | Min MemAvailable before Ollama scoring runs |
+| `BRF_KEEP_OLLAMA` | `0` | Set to `1` to keep Ollama running when starting a gaming session |
 
 After changing services, restart the dashboard:
 
@@ -142,7 +156,9 @@ systemctl --user restart review-dashboard.service
 ## Troubleshooting
 
 - **Control Panel buttons dead** — Hard refresh (Ctrl+Shift+R); restart `review-dashboard.service`.
-- **Ollama offline** — Start Factory shortcut starts Ollama; or run `ollama serve`.
+- **Ollama offline while gaming** — Normal with lazy Ollama; it starts after **Stop Recording**.
+- **No vision models** — Run `ollama pull moondream` once; models persist in `~/.ollama`.
+- **Clips stuck scoring** — Free RAM (close game) or lower `BRF_MIN_SCORE_MEM_KB`; check `~/.local/log/brain-rot-factory.log`.
 - **All clips score 8/10** — Run `./scripts/rescore-pending.sh` after upgrading.
 - **Upload 401** — Delete `~/shorts_assets/oauth.json` and re-authenticate.
 

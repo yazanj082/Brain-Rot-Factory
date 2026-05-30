@@ -12,9 +12,17 @@ import config
 
 log = logging.getLogger(__name__)
 
-RECORD_QUALITY_PRESETS = frozenset({
-    "ultralow", "low", "medium", "high", "veryhigh",
-})
+# gpu-screen-recorder -q values (see: man gpu-screen-recorder)
+GSR_QUALITY_PRESETS = frozenset({"medium", "high", "very_high", "ultra"})
+# Legacy dashboard aliases → GSR preset
+QUALITY_ALIASES: dict[str, str] = {
+    "ultralow": "medium",
+    "ultra_low": "medium",
+    "low": "medium",
+    "veryhigh": "very_high",
+    "very-high": "very_high",
+}
+RECORD_QUALITY_PRESETS = GSR_QUALITY_PRESETS
 RECORD_FPS_MIN = 15
 RECORD_FPS_MAX = 60
 
@@ -41,8 +49,22 @@ def _coerce_recording_settings(data: dict[str, Any]) -> None:
     except (TypeError, ValueError):
         data["record_fps"] = config.RECORD_FPS
 
-    q = str(data.get("record_quality", config.RECORD_QUALITY)).strip().lower()
-    data["record_quality"] = q if q in RECORD_QUALITY_PRESETS else config.RECORD_QUALITY
+    data["record_quality"] = _normalize_record_quality(
+        str(data.get("record_quality", config.RECORD_QUALITY))
+    )
+
+
+def _normalize_record_quality(raw: str) -> str:
+    q = str(raw).strip().lower().replace("-", "_")
+    q = QUALITY_ALIASES.get(q, q)
+    return q if q in GSR_QUALITY_PRESETS else config.RECORD_QUALITY
+
+
+def quality_for_gpu_screen_recorder(raw: str | None = None) -> str:
+    """Preset string passed to gpu-screen-recorder -q."""
+    if raw is None:
+        return _normalize_record_quality(str(load_settings().get("record_quality", config.RECORD_QUALITY)))
+    return _normalize_record_quality(str(raw))
 
 
 def normalize_recording_updates(updates: dict[str, Any]) -> dict[str, Any]:
@@ -55,9 +77,9 @@ def normalize_recording_updates(updates: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("record_fps must be a number") from exc
         out["record_fps"] = max(RECORD_FPS_MIN, min(RECORD_FPS_MAX, fps))
     if "record_quality" in updates:
-        q = str(updates["record_quality"]).strip().lower()
-        if q not in RECORD_QUALITY_PRESETS:
-            allowed = ", ".join(sorted(RECORD_QUALITY_PRESETS))
+        q = _normalize_record_quality(str(updates["record_quality"]))
+        if q not in GSR_QUALITY_PRESETS:
+            allowed = ", ".join(sorted(GSR_QUALITY_PRESETS))
             raise ValueError(f"record_quality must be one of: {allowed}")
         out["record_quality"] = q
     return out

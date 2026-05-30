@@ -6,8 +6,8 @@ PartOf=graphical-session.target
 [Service]
 Type=simple
 ExecStart=/home/yazan/Documents/Projects/brain-rot-factory/scripts/start_recording.sh
-Restart=on-failure
-RestartSec=5
+# Do not auto-restart: avoids notification spam if portal/quality fails
+Restart=no
 # Pass through the logged-in desktop session so the Wayland portal picker appears
 PassEnvironment=WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
 

@@ -151,11 +151,10 @@ body{font-family:'Inter',sans-serif;background:#0a0a0f;color:#e4e4e7;min-height:
       <input type="number" id="recordFps" min="15" max="60" step="1" value="30" style="width:70px;padding:.4rem;border-radius:6px;border:1px solid #3f3f46;background:#0a0a0f;color:#fff">
       <label>Quality</label>
       <select id="recordQuality" style="padding:.4rem;border-radius:6px;border:1px solid #3f3f46;background:#0a0a0f;color:#fff">
-        <option value="ultralow">Ultra low (lightest)</option>
-        <option value="low">Low (less GPU/RAM)</option>
-        <option value="medium">Medium</option>
+        <option value="medium">Medium (lighter)</option>
         <option value="high" selected>High (default)</option>
-        <option value="veryhigh">Very high (heavier)</option>
+        <option value="very_high">Very high (heavier)</option>
+        <option value="ultra">Ultra (max quality)</option>
       </select>
     </div>
     <h3 style="margin-top:1.25rem">Quality threshold</h3>
@@ -254,11 +253,13 @@ function renderStatus(d) {
   const rec = d.recorder?.active;
   const watch = d.watcher?.active;
   const oll = d.ollama?.active;
+  const visionReady = d.ollama?.vision_ready;
+  const lazyOllama = d.ollama?.lazy_mode !== false;
   const sch = d.schedule || {};
   g.innerHTML = `
     <div class="card"><div class="card-label">Recording</div><div class="card-value"><span class="dot ${rec?'on':'off'}"></span>${rec?'ON':'OFF'}</div></div>
     <div class="card"><div class="card-label">Clip processor</div><div class="card-value"><span class="dot ${watch?'on':'off'}"></span>${watch?'ON':'OFF'}</div></div>
-    <div class="card"><div class="card-label">Ollama AI</div><div class="card-value"><span class="dot ${oll?'on':'off'}"></span>${oll?'Ready':'Offline'}</div></div>
+    <div class="card"><div class="card-label">Ollama AI</div><div class="card-value"><span class="dot ${oll&&visionReady?'on':'off'}"></span>${!oll?(lazyOllama&&!rec?'After recording':'Offline'):visionReady?'Ready':'No vision model'}</div></div>
     <div class="card"><div class="card-label">Auto-upload</div><div class="card-value">${sch.auto_upload_enabled ? `ON at ${String(sch.upload_hour).padStart(2,'0')}:${String(sch.upload_minute).padStart(2,'0')}` : 'OFF'}</div></div>
     <div class="card"><div class="card-label">Clips ready</div><div class="card-value">${d.queue?.scored||0} scored</div></div>
     <div class="card"><div class="card-label">Next upload</div><div class="card-value">${sch.auto_upload_enabled ? fmtCountdown(sch.seconds_until||0) : 'manual only'}</div></div>
@@ -267,11 +268,25 @@ function renderStatus(d) {
     ? `Next auto-upload in ${fmtCountdown(sch.seconds_until||0)}`
     : 'Auto-upload disabled — use Upload Best Clip Now';
   const banner = $('#banner');
-  if (!oll) {
+  if (!oll && lazyOllama && !rec) {
     banner.style.display = 'block';
-    banner.textContent = 'Ollama is offline. Clips will queue until AI is back. Start Ollama on your system.';
-  } else banner.style.display = 'none';
-  if (d.tonights_pick) {
+    banner.textContent = 'Ollama starts after Stop Recording (saves RAM while gaming). Models stay in ~/.ollama across reboots.';
+  } else if (!oll && !lazyOllama) {
+    banner.style.display = 'block';
+    banner.textContent = 'Ollama is offline. Clips will queue until AI is back.';
+  } else if (!oll) {
+    banner.style.display = 'block';
+    banner.textContent = 'Starting Ollama for scoring…';
+  } else if (!visionReady) {
+    banner.style.display = 'block';
+    banner.textContent = 'Ollama has no vision models. In a terminal run: ollama pull moondream — then wait ~1 min for clips to score.';
+  } else if ((d.queue?.pending_score||0) > 0) {
+    banner.style.display = 'block';
+    banner.textContent = (d.queue.pending_score) + ' clip(s) scoring in progress…';
+  } else {
+    banner.style.display = 'none';
+  }
+  if (d.tonights_pick && visionReady) {
     const p = d.tonights_pick;
     banner.style.display = 'block';
     banner.textContent = `Tonight's pick: hype ${p.hype_score}/10 — ${p.summary || p.file_path}`;
@@ -434,7 +449,14 @@ $('#btnStart').onclick = async () => {
 };
 $('#btnStop').onclick = async () => {
   const r = await api('/api/session/stop', 'POST');
-  toast(r.ok ? 'Recording stopped. Processing your VOD...' : 'Failed: ' + (r.error||''));
+  if (r.ok) {
+    let msg = 'Recording stopped. Ollama starting — clips will score soon.';
+    const warn = r.results?.ollama?.vision_warning;
+    if (warn) msg += ' ' + warn;
+    toast(msg);
+  } else {
+    toast('Failed: ' + (r.error || ''));
+  }
   refresh({ forceClips: true });
 };
 $('#btnUploadNow').onclick = async () => {

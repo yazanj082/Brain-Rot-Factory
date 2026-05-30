@@ -34,6 +34,12 @@ def is_ollama_available() -> bool:
         return False
 
 
+def clear_models_cache() -> None:
+    """Force refresh on next list_models() (e.g. after ollama pull)."""
+    global _installed_models
+    _installed_models = None
+
+
 def list_models() -> set[str]:
     global _installed_models
     if _installed_models is not None:

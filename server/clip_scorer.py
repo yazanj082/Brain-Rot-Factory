@@ -205,7 +205,10 @@ def _can_run_ollama() -> bool:
         return False
     avail = _mem_available_kb()
     if avail < MIN_MEM_KB:
-        log.warning("Low memory (%d MB free) — deferring Ollama scoring", avail // 1024)
+        log.warning(
+            "Low memory (%d MB available) — deferring Ollama scoring",
+            avail // 1024,
+        )
         return False
     return True
 
@@ -333,7 +336,11 @@ def _run_vision_scoring(prompt: str, ocr_frames: list[Path]) -> dict[str, Any]:
             msg = f"{model}: {exc}"
             log.warning("Vision model failed — %s", msg)
             errors.append(msg)
-    raise RuntimeError("; ".join(errors) or "No vision models available")
+    if not _vision_models_to_try():
+        raise RuntimeError(
+            "No vision models installed. Run: ollama pull moondream"
+        )
+    raise RuntimeError("; ".join(errors) or "Vision scoring failed")
 
 
 def score_clip(
@@ -531,11 +538,23 @@ def backfill_spike_energy(clip_id: int) -> Optional[float]:
     return None
 
 
+def vision_models_ready() -> bool:
+    from ollama_client import clear_models_cache
+
+    clear_models_cache()
+    return len(_vision_models_to_try()) > 0
+
+
 def score_pending_clips(limit: Optional[int] = None) -> int:
     """Score pending clips; default limit from config (use limit=None for all)."""
     if not _can_run_ollama():
         return 0
     if not is_ollama_available():
+        return 0
+    if not vision_models_ready():
+        log.warning(
+            "Ollama is up but no vision models are installed (ollama pull moondream)"
+        )
         return 0
 
     batch_limit = max(1, config.SCORE_CLIPS_PER_CYCLE) if limit is None else limit
