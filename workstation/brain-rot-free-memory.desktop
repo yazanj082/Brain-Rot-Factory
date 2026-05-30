@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Brain-Rot Free Memory
+Comment=Stop factory leftovers and show RAM/swap status
+Exec=/home/yazan/Documents/Projects/brain-rot-factory/scripts/free-memory.sh
+Icon=preferences-system-memory
+Terminal=true
+Categories=AudioVideo;System;

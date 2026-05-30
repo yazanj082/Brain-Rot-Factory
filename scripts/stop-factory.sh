@@ -10,6 +10,43 @@ notify() {
   fi
 }
 
+mem_available_kb() {
+  awk '/^MemAvailable:/ { print $2; exit }' /proc/meminfo 2>/dev/null || echo 0
+}
+
+swap_used_percent() {
+  local total free used
+  total=$(awk '/^SwapTotal:/ { print $2; exit }' /proc/meminfo 2>/dev/null || echo 0)
+  free=$(awk '/^SwapFree:/ { print $2; exit }' /proc/meminfo 2>/dev/null || echo 0)
+  if [[ "$total" -le 0 ]]; then
+    echo 0
+    return
+  fi
+  used=$((total - free))
+  echo $((used * 100 / total))
+}
+
+kill_leftovers() {
+  pkill -f gpu-screen-recorder 2>/dev/null || true
+  pkill -f vod_watcher 2>/dev/null || true
+  pkill -f review_dashboard 2>/dev/null || true
+  pkill -f 'ffmpeg.*RawGameplay' 2>/dev/null || true
+}
+
+print_memory_status() {
+  echo ""
+  free -h
+  local pct avail_kb
+  pct=$(swap_used_percent)
+  avail_kb=$(mem_available_kb)
+  if [[ "$pct" -ge 80 ]]; then
+    echo ""
+    echo "WARNING: Swap is ${pct}% full (${avail_kb} kB MemAvailable)."
+    echo "Stopping the factory does not empty swap. Quit Overwatch/heavy apps, reboot,"
+    echo "or run: $(dirname "$0")/free-memory.sh --swap (only if enough free RAM)."
+  fi
+}
+
 echo "Stopping Brain-Rot Factory services..."
 
 systemctl --user stop game-recorder.service 2>/dev/null || true
@@ -27,5 +64,8 @@ else
   echo "BRF_STOP_OLLAMA=0 — leaving Ollama running"
 fi
 
+kill_leftovers
+
 notify "Factory stopped. All services and Ollama are off."
 echo "Brain-Rot Factory stopped."
+print_memory_status

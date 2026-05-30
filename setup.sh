@@ -117,7 +117,7 @@ fi
 # ── Desktop shortcuts ───────────────────────────────────────────
 step "Installing desktop shortcuts..."
 mkdir -p "$DESKTOP_DIR"
-for desk in brain-rot-factory brain-rot-start brain-rot-stop; do
+for desk in brain-rot-factory brain-rot-start brain-rot-stop brain-rot-free-memory; do
   src="$SCRIPT_DIR/workstation/${desk}.desktop"
   dest="$DESKTOP_DIR/${desk}.desktop"
   if [[ -f "$src" ]]; then
@@ -131,6 +131,7 @@ chmod +x \
   "$SCRIPT_DIR/setup.sh" \
   "$SCRIPT_DIR/scripts/start-factory.sh" \
   "$SCRIPT_DIR/scripts/stop-factory.sh" \
+  "$SCRIPT_DIR/scripts/free-memory.sh" \
   "$SCRIPT_DIR/scripts/rescore-pending.sh" \
   2>/dev/null || true
 update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true

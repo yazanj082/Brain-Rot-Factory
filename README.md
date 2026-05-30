@@ -112,6 +112,7 @@ Brain-Rot-Factory/
 ├── scripts/
 │   ├── start-factory.sh     # Start watcher + dashboard (Ollama after recording)
 │   ├── stop-factory.sh      # Stop everything
+│   ├── free-memory.sh       # Stop leftovers + RAM/swap status (--swap to reclaim)
 │   └── rescore-pending.sh   # Re-run AI on existing clips
 ├── workstation/             # systemd units + .desktop launchers
 └── server/
@@ -154,6 +155,21 @@ systemctl --user restart review-dashboard.service
 ---
 
 ## Troubleshooting
+
+### Swap still full after Stop Factory
+
+Stopping the factory **frees RAM** from factory processes; it does **not** automatically empty **swap**. Linux keeps swapped pages until you close heavy apps, reclaim swap, or reboot.
+
+1. Run **`./scripts/free-memory.sh`** (or app menu **Brain-Rot Free Memory**) — stops leftovers and prints `free -h`.
+2. **Quit Overwatch** and close the Control Panel browser tab.
+3. **Safest:** reboot.
+4. **Clear swap** (only if **MemAvailable** is several GB after closing games):
+   ```bash
+   ./scripts/free-memory.sh --swap
+   ```
+   Do **not** run this while swap is full and RAM is still tight — the system can freeze.
+
+Optional minor cache drop: `./scripts/free-memory.sh --drop-caches` (requires sudo).
 
 - **Control Panel buttons dead** — Hard refresh (Ctrl+Shift+R); restart `review-dashboard.service`.
 - **Ollama offline while gaming** — Normal with lazy Ollama; it starts after **Stop Recording**.
